@@ -70,6 +70,8 @@ template <int NumChannels> struct DefaultVstConfigClass
 	// set to true if your node produces a tail
 	static constexpr bool hasTail() { return false; }
 
+	static constexpr bool isProcessingHiseEvent() { return false; }
+
 	static constexpr int getFixChannelAmount() { return NumChannels; };
 };
 
@@ -82,9 +84,9 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
 	SN_FORWARD_PARAMETER_TO_MEMBER(wrapper);
 	SN_EMPTY_INITIALISE;
 
-	wrapper():
-	  obj(nullptr)
-	{};
+    
+    
+	
 
 	static Identifier getStaticId() { return ConfigClass::getStaticId(); }
 
@@ -99,7 +101,33 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
 	static constexpr bool hasTail() { return ConfigClass::hasTail(); };
 	static constexpr bool isSuspendedOnSilence() { return ConfigClass::isSuspendedOnSilence(); };
 	static constexpr int getFixChannelAmount() { return ConfigClass::getFixChannelAmount(); };
-	
+	static constexpr bool isProcessingHiseEvent() { return ConfigClass::isProcessingHiseEvent(); }
+
+    static constexpr int getEventBufferSize()
+    {
+        if constexpr (isProcessingHiseEvent())
+            return NUM_POLYPHONIC_VOICES;
+        else
+            return 1;
+    }
+    
+    static constexpr int EVENT_BUFFER_SIZE = getEventBufferSize();
+    
+    span<VstMidiEvent, EVENT_BUFFER_SIZE> eventBuffer;
+    span<VstMidiEvent*, EVENT_BUFFER_SIZE> eventBufferPtr;
+    VstEvents events;
+    
+    wrapper():
+      obj(nullptr)
+    {
+        events.events = eventBufferPtr.begin();
+        
+        for(int i = 0; i < EVENT_BUFFER_SIZE; i++)
+        {
+            eventBufferPtr[i] = eventBuffer.begin() + i;
+        }
+    };
+    
 	static constexpr int NumTables = 0;
 	static constexpr int NumSliderPacks = 0;
 	static constexpr int NumAudioFiles = 0;
@@ -108,6 +136,8 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
 
 	VstEffectType obj;
 
+    
+    
 	void prepare(PrepareSpecs specs)
 	{
 		this->obj.sampleRate = specs.sampleRate;
@@ -115,11 +145,21 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
 	
 	void handleHiseEvent(HiseEvent& e)
 	{
-		
+		if constexpr (isProcessingHiseEvent())
+		{
+			auto m = e.toMidiMesage();
+
+            memcpy(eventBuffer[events.numEvents++].midiData, m.getRawData(), 3);
+		}
 	}
 	
 	template <typename T> void process(T& data)
 	{
+        if(events.numEvents != 0)
+        {
+            this->obj.processEvents(&events);
+            events.numEvents = 0;
+        }
 		if(obj.isReplacing)
 		{
 			float** inputs = data.getRawChannelPointers();

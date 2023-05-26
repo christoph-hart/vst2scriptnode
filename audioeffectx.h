@@ -19,6 +19,8 @@ constexpr int kVstMaxProductStrLen = VST_CHAR_BUFFER_SIZE;
 constexpr int kVstMaxVendorStrLen =  VST_CHAR_BUFFER_SIZE;
 #define vst_strncpy memcpy
 
+#define DECLARE_VST_DEPRECATED(x) x
+
 template <typename T> void value2string(T value, char* buffer, size_t length)
 {
 	auto s = std::to_string(value);
@@ -29,7 +31,23 @@ template <typename T> void value2string(T value, char* buffer, size_t length)
 #define float2string value2string<float>
 #define int2string value2string<int>
 
-struct VstEvents {};
+enum kVstEventType
+{
+	kVstMidiType
+};
+
+struct VstMidiEvent
+{
+	kVstEventType type = kVstMidiType;
+	int deltaFrames = 0;
+	char midiData[3];
+};
+
+struct VstEvents
+{
+	int numEvents = 0;
+	VstMidiEvent** events = nullptr;
+};
 
 enum kVstPinFlags
 {
@@ -97,6 +115,7 @@ public:
 	virtual bool getOutputProperties(VstInt32 index, VstPinProperties* properties) { return false; }; 
 	
 	int numParameters = 0;
+	int numPrograms = 0;
 	int numInputs = 0;
 	int numOutputs = 0;
 	bool isReplacing = true;
@@ -107,13 +126,19 @@ protected:
 
 	int curProgram = 0;
 
+	void setSampleRate(double nr) { sampleRate = nr; }
+
+	void setBlockSize(int) {};
+
 	double getSampleRate() const { return sampleRate; }
 	void setNumInputs(int numInputs_) { numInputs = numInputs_; }
     void setNumOutputs(int numOutputs_) { numOutputs = numOutputs_; }
 	void canProcessReplacing(bool isReplacing_=true) { isReplacing = isReplacing_; }
 	void canDoubleReplacing() {}
 	void programsAreChunks(bool) {};
-    void isSynth(bool synth_) { synth = synth_; }
+    void isSynth(bool synth_=true) { synth = synth_; }
 	void setUniqueID(int) {};
+	void canMono(bool=true) {};
+	void wantEvents(bool=true) {};
 };
 
