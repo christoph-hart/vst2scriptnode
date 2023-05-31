@@ -9,6 +9,10 @@
 
 #pragma once
 
+#ifndef __audioeffect__
+#define __audioeffect__ 1
+#endif
+
 using VstInt32 = int32_t;
 using audioMasterCallback = void*;
 

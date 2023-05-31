@@ -5,7 +5,7 @@
  * 
  *  In order to use this, follow these steps:
  *  
- * 	1. Copy this file and the "audioeffectx.h" file into the "ThirdParty/src" subfolder
+ * 	1. Copy this file, the wrap_config.h file and the "audioeffectx.h" file into the "ThirdParty/src" subfolder
  *  2. Copy the VST source code files into any subdirectory of the "ThirdParty/src" subfolder
  *     Be aware that you must not include the editor source files (and you might have to delete
  *     a few lines in the effect file that spawns the editor class, but you can just follow the
@@ -16,16 +16,14 @@
  *  4. Include the .cpp files from the effect (they should include their headers automatically).
  *     If the VST effect implementation is split into more CPP files, just include them one after
  *     another.
- *     You will then run into a compile error that `#include "audioeffectx.h"` can't be found.
- *     In order to solve this, just point it to our dummy file one directory above:
- *     
- *     `#include "../audioeffectx.h"`
- * 
+ *     You will then (maybe) run into a compile error that `#include "audioeffectx.h"` can't be found.
+ *     In order to solve this, just remove that include statement as we've already included the dummy
+ *     adapter here...
  *  5. Now you need to create a metadata class that provides the node ID, the channel amount
- *     and some other properties. Define a class and derive it from DefaultVstConfigClass below
- *     (take a look at the class documentation for an example)
+ *     and some other properties. Define a class and derive it from scriptnode::meta::default_config
+ *     (take a look at the wrap_config.h for an example)
  *  6. The last thing you need to do is to add the boilerplate code that creates the wrapper.
- *     (take a look at the bottom of this file).
+ *     (take a look at the bottom of this file for the macro).
  *  7. That's it. You can now just reexport the DspNetwork and if everything goes smooth, you
  *     have the VST effect inside scriptnode (or hardcoded FX) ready to be used! Be aware that
  *     all VST parameters are normalised (from 0 to 1).
@@ -37,6 +35,7 @@
 #include <JuceHeader.h>
 
 #include "audioeffectx.h"
+#include "wrap_config.h"
 
 #pragma once
 
@@ -47,34 +46,6 @@ using namespace juce;
 using namespace hise;
 using namespace scriptnode;
 
-/** Derive your config class from this and supply the number of channels as template argument,
- *  then add a single macro with the node ID you want it to have:
- *
- *	```
- *	struct MyConfig: public scriptnode2vst::DefaultVSTConfigClass<2> // stereo
- *	{
- *	    SN_NODE_ID("some_id");
- *	};
- *	```
- *
- *	Then pass this configuration class as template argument into the vst2scriptnode::wrapper
- *	node template, along with the VST effect class you want it to wrap.
- *
- */
-template <int NumChannels> struct DefaultVstConfigClass
-{
-	// set to true if your doesn't generate sound from silence and can be suspended when the input 
-	// signal is silent
-	static constexpr bool isSuspendedOnSilence() { return true; }
-
-	// set to true if your node produces a tail
-	static constexpr bool hasTail() { return false; }
-
-	static constexpr bool isProcessingHiseEvent() { return false; }
-
-	static constexpr int getFixChannelAmount() { return NumChannels; };
-};
-
 /** The node wrapper that should be used to wrap the VST effect into a node. */
 template <typename VstEffectType, typename ConfigClass> struct wrapper: public scriptnode::data::base
 {
@@ -83,10 +54,6 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
 	SN_GET_SELF_AS_OBJECT(wrapper);
 	SN_FORWARD_PARAMETER_TO_MEMBER(wrapper);
 	SN_EMPTY_INITIALISE;
-
-    
-    
-	
 
 	static Identifier getStaticId() { return ConfigClass::getStaticId(); }
 
@@ -252,13 +219,15 @@ template <typename VstEffectType, typename ConfigClass> struct wrapper: public s
  *  This will take the configuration class you've defined and the VST effect class
  *  (that is derived from our dummy AudioEffectX class) and melt it into one nice
  *  scriptnode object!
+ *  Be aware that the ClassId parameter must match the filename so that the factory
+ *  class can resolve this correctly.
  * 
- *  Example: you've written a class called MyConfig derived from DefaultVstConfigClass<2>
- *           and want to use the VST effect class mda_compressor. In order to do so, add
+ *  Example: you've written a class called MyConfig derived from scriptnode::meta::default_config<2>
+ *           and want to use the VST effect class mda_compressor in the file (mda_comp.h). In order to do so, add
  *           this macro after your config class and the include statements:
  * 
- * 	SN_DEFINE_VST_WRAPPER(mda_compressor, MyConfig)
+ * 	SN_DEFINE_VST_WRAPPER(mda_comp, mda_compressor, MyConfig)
  *  
  */
-#define SN_DEFINE_VST_WRAPPER(EffectClass, ConfigClass) namespace project { template <int NV> using vst_wrapper = vst2scriptnode::wrapper<EffectClass, ConfigClass>; }
+#define SN_DEFINE_VST_WRAPPER(ClassId, EffectClass, ConfigClass) namespace project { template <int NV> using ClassId = vst2scriptnode::wrapper<EffectClass, ConfigClass>; }
 
